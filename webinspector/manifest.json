@@ -1,0 +1,15 @@
+{
+
+  "manifest_version": 2,
+  "name": "hds-webinspector",
+  "version": "0.1",
+  "description": "Adds a red border to all webpages matching mozilla.org.",
+  "icons": { },
+  "protocol_handlers": [
+    {
+      "protocol": "ext+hds",
+      "name": "HDS address",
+      "uriTemplate": "/viewer.html#!/%s"
+    }
+  ]
+}

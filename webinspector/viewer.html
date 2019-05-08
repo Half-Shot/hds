@@ -1,0 +1,53 @@
+<link rel="stylesheet" href="https://cdn.rawgit.com/Chalarangelo/mini.css/v3.0.1/dist/mini-default.min.css">
+
+<header class="sticky">
+  <h1 id="title"> HDS Viewer <small id="friendly-name"></small></h1>
+  <div id="search" class="input-group fluid">
+      <label for="username"><span class="icon-search"></span></label>
+      <input type="text" id="topicSearch" placeholder="Search Topics" disabled/>
+    </div>
+</header>
+
+<div id="connecting">
+  <p>Connecting...</p>
+  <div class="spinner primary"></div>
+</div>
+
+<div id="connectionFailed" class="row hidden">
+    <div class="card error">
+        <h3 class="doc">Failed to connect</h3>
+        <p class="doc" id="reason">Some information about the failure.</p>
+    </div>
+</div>
+
+<section id="hostConsole" hidden>
+  <div id="connectedTo">
+    <button class="primary small" id="setDefaultButton">Set as default</button>
+    You are connected to: <code id="hostname">%NAME</code>
+  </div>
+  <h2> Topics </h2>
+    <p id="searchResultsText">Results for <span id="searchTerm">...</span></p>
+    <table id="topicSearchResult">
+      <thead>
+        <tr>
+          <th>Topic</th>
+          <th>Hosts</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td data-label="Name">Chad</td>
+          <td data-label="Surname">Wilberts</td>
+        </tr>
+      </tbody>
+    </table>
+  <h2> Tools </h2>
+
+</section>
+
+<footer>
+    Administrator: <a id="contactName">Not Given</a>
+</footer>
+
+<script src="./viewer.js"></script>
+<link rel="stylesheet" href="./style.css">

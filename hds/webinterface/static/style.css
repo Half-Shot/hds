@@ -1,0 +1,31 @@
+ @import url('https://fonts.googleapis.com/css?family=Roboto');
+
+ body {
+     font-family: "Roboto", sans-serif;
+ }
+
+ section#map {
+     border: 1px solid blue;
+ }
+
+ section#stats {
+     border: 1px solid red;
+ }
+
+ /* Node styles */
+
+
+.link {
+    stroke: #aaa;
+}
+
+.node text {
+    stroke:#333;
+    cursos:pointer;
+}
+
+.node circle{
+    stroke:#fff;
+    stroke-width:3px;
+    fill:#555;
+}

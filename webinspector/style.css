@@ -1,0 +1,26 @@
+#connecting {
+  margin-left: auto;
+  margin-right: auto;
+  width: 128px;
+}
+
+header {
+    height: 5rem;
+}
+
+header > #title {
+    float: left;
+}
+
+header > #search {
+    margin-top: 1rem;
+    float: right;
+}
+
+table th, table td {
+	padding: calc(1 * var(--universal-padding));
+}
+
+#topicSearchResult {
+    margin: 0 15%;
+}

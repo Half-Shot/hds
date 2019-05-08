@@ -1,0 +1,27 @@
+version: "3.7"
+services:
+  hds:
+    build: .
+    ports:
+      - 27012:27012
+    volumes: 
+      - ./data:/app/data
+    networks:
+       - hdsnet
+    environment:
+      - "HDS_PRIVKEY_PATH=/app/data/privkey.pem"
+      - "HDS_CONTACT_NAME=Example Name"
+      - "HDS_CONTACT_EMAIL=will@half-shot.uk"
+      - "REDIS_HOST=redis"
+  redis:
+    image: "redis:alpine"
+    networks:
+       - hdsnet
+    volumes:
+      - db-data:/data
+
+volumes:
+  db-data:
+
+networks:
+  hdsnet:
