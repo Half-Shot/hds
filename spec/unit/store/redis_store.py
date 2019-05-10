@@ -46,10 +46,14 @@ class RedisStoreTestCase(unittest.TestCase):
         r.store_host_topic("bob", "foo", ["baz"], "fakesig")
         r.store_host_topic("bob", "foo", ["baz", "foobar"], "fakesig")
 
-        self.assertEqual(r.get_topic_hosts("foo", "bar"), ["alice"])
-        self.assertEqual(r.get_topic_hosts("foo", "baz"), ["bob"])
-        self.assertEqual(r.get_topic_hosts("foo", "baz/foobar"), [])
-        self.assertEqual(r.get_topic_hosts("foo", "foobar"), ["bob"])
+        self.assertEqual(r.get_topic_hosts("foo", ["bar"]), {
+            'alice': {'hds.signature': 'fakesig', 'subtopics': ["bar"]}
+        })
+        self.assertEqual(r.get_topic_hosts("foo", ["baz"]), {
+            'bob': {'hds.signature': 'fakesig', 'subtopics': ["baz"]}
+        })
+        # self.assertEqual(r.get_topic_hosts("foo", ["baz", "foobar"]))
+        # self.assertEqual(r.get_topic_hosts("foo", ["foobar"]))
 
     def test_get_topic_hosts(self):
         r = self.createStore()
@@ -64,9 +68,8 @@ class RedisStoreTestCase(unittest.TestCase):
         )
     
     def test_get_topic_hosts_expired(self):
-        lu = time() - 1
         r = self.createStore()
-        r.store_host_state("alice", "hds.host", "hostname", 1, "fakesig", lu)
+        r.store_host_state("alice", "hds.host", "hostname", 1, "fakesig")
         r.store_host_topic("alice", "foo", [], "fakesig")
         self.assertEqual(r.get_topic_hosts("foo"), ["alice"])
         sleep(1)
@@ -74,7 +77,7 @@ class RedisStoreTestCase(unittest.TestCase):
 
     def test_set_and_get_state(self):
         r = self.createStore()
-        la = int(time())
+        la = int(time() * 1000)
         r.store_host_state("alice", "hds.host", "hostname", 100, "fakesig", la)
         r.store_host_state("alice", "hds.test.expired", "expired", -1, "fakesig", la)
         r.store_host_state("alice", "hds.test.valid", "foobar", 100, "fakesig", la)

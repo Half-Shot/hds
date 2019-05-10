@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import argparse
 from .client import DirectoryClient
 from sys import argv
 
@@ -44,7 +45,8 @@ def pretty_print_topic(topic_res):
     if print_error(topic_res):
         return
     print("Hosts that support the topic:")
-    for host_name, host_values in topic_res["hosts"].items():
+
+    for host_name in topic_res["hosts"]:
         has_subtopics = len(host_values["subtopics"]) > 0
         print("  ", host_name[:32], "" if has_subtopics else ":No subtopic")
         if has_subtopics:
@@ -52,22 +54,30 @@ def pretty_print_topic(topic_res):
 
 
 async def main():
-    host = argv[1] if len(argv) > 2 else "http://localhost"
-    if not host.startswith("http"):
-        host = "https://" + host
-    host += ":27012"
-    c = DirectoryClient(host)
-    req_type = argv[2] if len(argv) > 2 else argv[1]
-    if req_type == "identify":
+    parser = argparse.ArgumentParser(description='dig for HDS - Request information about hosts from a host directory.')
+    parser.add_argument('--host', type=str, default="http://localhost:27012",
+                        help="Host to connect to, defaults to localhost"
+    )
+    parser.add_argument('req', type=str, choices=["identify", "host", "topics", "topic"], help="Action to perform")
+    parser.add_argument('--host_or_topic', type=str, default=None, help="Only for host, topic")
+    args = parser.parse_args()
+
+    c = DirectoryClient(args.host)
+
+    if args.req == "identify":
         await pretty_print_identify(c)
-    elif req_type == "host":
-        req_value = argv[3]
-        await pretty_print_host(req_value, c)
-    elif req_type == "all_topics" or req_type == "topics":
+    elif args.req == "host":
+        if args.host_or_topic is None:
+            print("host not given")
+            return
+        await pretty_print_host(args.host_or_topic, c)
+    elif args.req == "topics":
         print("Topics: " + "\n\t".join(await c.get_topics()))
-    elif req_type == "topic":
-        req_value = argv[3]
-        pretty_print_topic(await c.get_topic(req_value))
+    elif args.req == "topic":
+        if args.host_or_topic is None:
+            print("topic not given")
+            return
+        pretty_print_topic(await c.get_topic(args.host_or_topic))
     else:
         print("Request type not understood")
 

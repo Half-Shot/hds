@@ -18,7 +18,9 @@ K_TOPIC_HOST_SIG = "hds/topic/%s/host/%s/signature"
 K_TOPIC_SUBTOPIC_HOSTS = "hds/topic/%s/hosts/%s/subtopics"
 K_HOST_STATE = "hds/host/%s/state/%s"
 K_HOST_STATE_KEYS = "hds/host/%s/state"
+
 HOST_STATE_FORMAT = "%s:%i:%i:%s"
+STATE_STORAGE_LIMIT = 255
 
 # Topic
 
@@ -32,6 +34,10 @@ HOST_STATE_FORMAT = "%s:%i:%i:%s"
 # hds/topic/{topic}/hosts/{host}/subtopics => LIST
 # hds/host/{host}/state/{key} => STR signature:ttl:last_updated:value
 # hds/host/state => LIST keys
+
+
+def curr_time():
+    return int(time.time() * 1000)
 
 
 class RedisStore():
@@ -48,32 +54,45 @@ class RedisStore():
     def get_topics(self):
         """
         Get all topics found in the store.
-        
+
         :return: A list of topic strings
         """
         logger.debug("redis://%s" % K_TOPICS)
         return [t.decode() for t in self.r.lrange(K_TOPICS, 0, -1)]
 
-    def get_topic_hosts(self, topic, subtopic=None):
+    def get_topic_hosts(self, topic, subtopics=None):
         """
         Get all hosts which implement the topic, and optionally the subtopics(s).
 
         :param topic: A topic string
-        :param subtopic: A list of subtopics, ordered by depth. Optional
-        :return: A list of hosts
+        :param subtopic: A list of subtopics. Optional
+        :return: A dict of hosts
         """
         path = K_TOPIC_HOSTS % topic
         topic_hosts = [host.decode() for host in self.r.lrange(path, 0, -1)
-                       if not self.has_host_expired(host.decode())]
-        if subtopic is None:
-            return topic_hosts
-        subhosts = []
+                       if not self.has_host_expired(host.decode()) and
+                       not self.is_host_tombstoned(host.decode(), throw=False)]
+        hosts = {}
         for host in topic_hosts:
-            subtopics = [
-                s.decode() for s in self.r.lrange(K_TOPIC_SUBTOPIC_HOSTS % (topic, host), 0, -1)]
-            if subtopic in subtopics:
-                subhosts.append(host)
-        return subhosts
+            sig = self.r.get(K_TOPIC_HOST_SIG % (topic, host)).decode()
+            host_entry = {
+                "hds.signature": sig,
+            }
+
+            host_entry["subtopics"] = [
+                s.decode() for s in self.r.lrange(K_TOPIC_SUBTOPIC_HOSTS % (topic, host), 0, -1)
+            ]
+            print(topic, subtopics)
+            print(host, host_entry)
+
+            if subtopics is not None:
+                for i in range(len(subtopics)):
+                    if subtopics[i] not in host_entry["subtopics"][i]:
+                        host_entry = None
+                        break
+            if host_entry is not None:
+                hosts[host] = host_entry
+        return hosts
 
     def store_host_topic(self, server, topic: str, subtopics: list, signature):
         """
@@ -85,6 +104,7 @@ class RedisStore():
         :param signature: Signature of the payload
         :return:
         """
+        self.is_host_tombstoned(server)
         # Store the topic in the master list if its not there already
         if topic not in [t.decode() for t in self.r.lrange(K_TOPICS, 0, -1)]:
             logger.debug("Added %s to %s" % (topic, K_TOPICS))
@@ -99,6 +119,7 @@ class RedisStore():
             self.r.delete(K_TOPIC_SUBTOPIC_HOSTS % (topic, server))
             for subtopic in subtopics:
                 self.r.lpush(K_TOPIC_SUBTOPIC_HOSTS % (topic, server), subtopic)
+                print(K_TOPIC_SUBTOPIC_HOSTS % (topic, server), subtopics)
 
         self.r.set(K_TOPIC_HOST_SIG % (topic, server), signature)
 
@@ -125,8 +146,7 @@ class RedisStore():
                 "hds.last_updated": last_updated,
                 "value": vals[3],
             }
-            # TODO: Calculate expired.
-            if int(time.time()) - last_updated > ttl:
+            if curr_time() - last_updated > ttl:
                 state["hds.expired"].append(key)
         return state
 
@@ -138,15 +158,14 @@ class RedisStore():
         :return: True if expired, False otherwise
         """
         vals = self.r.get(K_HOST_STATE % (server, "hds.host")).decode().split(":", 3)
-        ttl = int(vals[1])
+        ttl = int(vals[1]) * 1000
         last_updated = int(vals[2])
-        # TODO: Calculate expired.
-        return int(time.time()) - last_updated > ttl
+        return curr_time() - last_updated > ttl
 
     def find_host(self, server):
         """
-        Find a host by a partial or full servername. Will return a match if exactly one hosts matches, otherwise will
-        throw a HDSFailure exception.
+        Find a host by a partial or full servername. Will return a match if exactly
+        one hosts matches, otherwise will throw a HDSFailure exception.
 
         :param server: The server name string, either partial or full
         :return: A full server name.
@@ -172,12 +191,44 @@ class RedisStore():
         :param signature: The signature of the key value set
         :param last_updated: The time of the state update, will use current time if not defined
         """
-        last_updated = time.time() if last_updated is None else last_updated
+        self.is_host_tombstoned(server)
+        last_updated = curr_time() if last_updated is None else last_updated
         store_val = HOST_STATE_FORMAT % (signature, ttl, last_updated, value)
-        if server not in [s.decode() for s in self.r.lrange(K_HOST_STATE_KEYS % server, 0, -1)]:
-            logger.debug("Added new key %s to %s" % (key, server[:16]))
-            self.r.lpush(K_HOST_STATE_KEYS % server, key)
+        existing_keys = [s.decode() for s in self.r.lrange(K_HOST_STATE_KEYS % server, 0, -1)]
         if server not in [s.decode() for s in self.r.lrange(K_HOSTS, 0, -1)]:
             self.r.lpush(K_HOSTS, server)
+        if key not in existing_keys:
+            logger.debug("Added new key %s to %s" % (key, server[:16]))
+            self.r.lpush(K_HOST_STATE_KEYS % server, key)
         logger.debug("Updated key %s for %s" % (key, server[:16]))
         self.r.set(K_HOST_STATE % (server, key), store_val)
+        self._check_host_state_size(server, len(existing_keys))
+
+    def is_host_tombstoned(self, server, throw=True):
+        if self.r.get(K_HOST_STATE % (server, "hds.tombstone")) is not None:
+            if throw:
+                raise HDSFailure("Host is tombstoned, it cannot be used",
+                                 type="hds.error.host.tombstone")
+            return True
+        return False
+
+    def _check_host_state_size(self, server, keysize: int):
+        if keysize > STATE_STORAGE_LIMIT:
+            full_state = self.get_host_state(server)
+            while len(full_state.keys()) > STATE_STORAGE_LIMIT + 1:  # + 1 for hds.expired
+                key_to_remove = None
+                oldest_ts = 9223372036854775807  # maxint
+                # TODO: refactor this
+                for k, v in full_state.items():
+                    if k == "hds.expired" or k == "hds.host":
+                        continue
+                    upd = v.get("hds.last_updated")
+                    if upd < oldest_ts:
+                        oldest_ts = upd
+                        key_to_remove = k
+                logger.debug(
+                    "Removed key %s for %s as it has exceeded the key count" %
+                    (key_to_remove, server)
+                )
+                del full_state[key_to_remove]
+                self.r.lrem(K_HOST_STATE_KEYS % server, 1, key_to_remove)

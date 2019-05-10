@@ -45,14 +45,15 @@ class HDSRunner:
             detach=True
         )
         self.instance_set.append(tuple([instance, instance_redis]))
-        logger.info("Giving the container 2 seconds to start")
-        time.sleep(2)
+        logger.info("Starting container")
+        time.sleep(1)
+        return instance
 
     def logs(self):
-        if self.instance is None:
+        if len(self.instance_set) == 0:
             return
         logger.info("=== Start of instance logs ===")
-        l = self.instance.logs()
+        l = self.instance_set[0][0].logs()
         if isinstance(l, bytes):
             l = l.decode().split("\n")
         for log in l:

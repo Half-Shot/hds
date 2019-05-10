@@ -1,0 +1,136 @@
+version: "3.7"
+services:
+  hds_1:
+    image: project_hds:latest
+    hostname: masterhds
+    depends_on:
+      - redis_1
+    ports:
+      - 27012:27012
+    volumes: 
+      - ./data1:/app/data
+    networks:
+      hdsnet:
+        aliases:
+          - hds1
+    environment:
+      - "HDS_PRIVKEY_PATH=/app/data/privkey.pem"
+      - "HDS_CONTACT_NAME=Example Name"
+      - "HDS_CONTACT_EMAIL=will@half-shot.uk"
+      - "HDS_HOST=hds_1"
+      - "REDIS_HOST=redis_1"
+  redis_1:
+    image: "redis:alpine"
+    networks:
+       - hdsnet
+    volumes:
+      - db-data1:/data
+# slave 1
+  hds_2:
+    image: project_hds:latest
+    depends_on:
+      - hds_1
+      - redis_2
+    ports:
+      - 27013:27012
+    volumes: 
+      - ./data2:/app/data
+    networks:
+       - hdsnet
+    environment:
+      - "HDS_PRIVKEY_PATH=/app/data/privkey.pem"
+      - "HDS_CONTACT_NAME=Example Name"
+      - "HDS_CONTACT_EMAIL=will@half-shot.uk"
+      - "HDS_HOST=hds_2"
+      - "HDS_REGISTER_HOSTS=http://hds1:27012"
+      - "REDIS_HOST=redis_2"
+  redis_2:
+    image: "redis:alpine"
+    networks:
+       - hdsnet
+    volumes:
+      - db-data2:/data
+# slave 2
+  hds_3:
+    image: project_hds:latest
+    depends_on:
+      - hds_1
+      - redis_3
+    ports:
+      - 27014:27012
+    volumes: 
+      - ./data3:/app/data
+    networks:
+       - hdsnet
+    environment:
+      - "HDS_PRIVKEY_PATH=/app/data/privkey.pem"
+      - "HDS_CONTACT_NAME=Example Name"
+      - "HDS_CONTACT_EMAIL=will@half-shot.uk"
+      - "REDIS_HOST=redis_3"
+      - "HDS_HOST=hds_3"
+      - "HDS_REGISTER_HOSTS=http://hds1:27012"
+  redis_3:
+    image: "redis:alpine"
+    networks:
+       - hdsnet
+    volumes:
+      - db-data3:/data
+  # slave 4
+  hds_4:
+    image: project_hds:latest
+    depends_on:
+      - hds_1
+      - redis_4
+    ports:
+      - 27015:27012
+    volumes: 
+      - ./data4:/app/data
+    networks:
+       - hdsnet
+    environment:
+      - "HDS_PRIVKEY_PATH=/app/data/privkey.pem"
+      - "HDS_CONTACT_NAME=Example Name"
+      - "HDS_CONTACT_EMAIL=will@half-shot.uk"
+      - "REDIS_HOST=redis_4"
+      - "HDS_HOST=hds_4"
+      - "HDS_REGISTER_HOSTS=http://hds1:27012"
+  redis_4:
+    image: "redis:alpine"
+    networks:
+       - hdsnet
+    volumes:
+      - db-data4:/data
+  # slave 5
+  hds_5:
+    image: project_hds:latest
+    depends_on:
+      - hds_1
+      - redis_5
+    ports:
+      - 27016:27012
+    volumes: 
+      - ./data5:/app/data
+    networks:
+       - hdsnet
+    environment:
+      - "HDS_PRIVKEY_PATH=/app/data/privkey.pem"
+      - "HDS_CONTACT_NAME=Example Name"
+      - "HDS_CONTACT_EMAIL=will@half-shot.uk"
+      - "REDIS_HOST=redis_5"
+      - "HDS_HOST=hds_5"
+      - "HDS_REGISTER_HOSTS=http://hds1:27012"
+  redis_5:
+    image: "redis:alpine"
+    networks:
+       - hdsnet
+    volumes:
+      - db-data5:/data
+volumes:
+  db-data1:
+  db-data2:
+  db-data3:
+  db-data4:
+  db-data5:
+
+networks:
+  hdsnet:

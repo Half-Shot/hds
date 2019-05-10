@@ -31,9 +31,15 @@ def verify_payload(b58_server_key, body):
     :param body:
     :return:
     """
-    encSig = body.get("hds.signature")
-    sig = base64.b64decode(encSig)
+    try:
+        encSig = body.get("hds.signature")
+        sig = base64.b64decode(encSig)
+    except Exception as e:
+        logger.warning("Failed trying to decode signature %s", e)
+        raise HDSFailure("Could not decode signature bytes", type="hds.error.payload.bad_signature")
+
     public_key = load_der_public_key(base58.b58decode(b58_server_key), backend=default_backend())
+
     if not isinstance(public_key, rsa.RSAPublicKey):
         logger.warning("Servername is not a RSA public key")
         raise HDSFailure("Not a RSA public key", type="hds.error.servername.not_rsa")

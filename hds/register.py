@@ -8,7 +8,7 @@ from time import sleep
 from os.path import exists
 from .client import DirectoryClient, generate_key
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 DEFAULT_KEY_LOCATION = Path.joinpath(Path.home(), ".hds/private.pem")
@@ -16,11 +16,11 @@ TTL = 60 * 60 * 24 * 1
 
 
 async def main(args):
-    logger.warning("Starting HDS registration service")
+    logger.info("Starting HDS registration service")
     if cliArgs.host:
         host = cliArgs.host
     else:
-        host = environ.get("HDS_HOST", "127.0.0.1:27012")
+        host = environ.get("HDS_HOST", "http://127.0.0.1:27012")
 
     # 0. Generate, if needed.
     if args.generate_keys:
@@ -56,21 +56,21 @@ async def main(args):
         else:
             state[state_name] = ""
     state_host = state.pop("hds.host", None)
-    state["hds.ttl"] = int(state.pop("hds.ttl"))
+    if state_host is not None or len(state.keys()) > 0:
+        state["hds.ttl"] = int(state.pop("hds.ttl"))
     run = True
-    logger.info("FYI, my key is: %s" % client.get_pubkey())
     while run:
         tasks = []
         logger.info("Sending state and topics...")
         if state_host is not None:
-            logger.debug("Sending host %s" % (state_host))
+            logger.info("Sending host %s" % (state_host))
             await client.send_state("hds.host", state_host)
             logger.debug("Sent host")
         for state_name, state_value in state.items():
-            logger.debug("Sending state %s = %s" % (state_name, state_value))
+            logger.info("Sending state %s = %s" % (state_name, state_value))
             tasks.append(client.send_state(state_name, state_value))
         for topic_name, topic_value in topics.items():
-            logger.debug("Sending topic %s = %s" % (topic_name, topic_value))
+            logger.info("Sending topic %s = %s" % (topic_name, topic_value))
             tasks.append(client.put_topic(topic_name, topic_value))
         await asyncio.wait(tasks)
         logger.info("Done...")

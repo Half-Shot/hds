@@ -4,7 +4,6 @@ import logging
 import time
 import re
 
-from .lrucache import LruCache
 from ..util import HDSFailure
 
 logger = logging.getLogger(__name__)
@@ -13,7 +12,6 @@ MONGOSTRING = os.environ.get("MONGOSTRING")
 
 class Store():
     def __init__(self):
-        self.host_cache = LruCache(1000)
         logger.info("Starting new store instance")
         if MONGOSTRING is None:
             raise Exception("Enviroment variable MONGOSTRING is defined. Cannot continue.")
@@ -81,9 +79,6 @@ class Store():
         }, upsert=True)
 
     def get_host_state(self, server):
-        host = self.host_cache.get(server)
-        if host:
-            return host
         hosts = self.client.get_database().get_collection("hosts")
         regx = re.compile("^" + server)
         results: dict = hosts.count_documents({"server": regx})
@@ -112,9 +107,9 @@ class Store():
                 "hds.signature": val.get("signature"),
                 "hds.ttl": val.get("ttl"),
             }
-            if int(time.time()) - val.get("last_updated") > val.get("ttl"):
+            if int(time.time() * 1000) - val.get("last_updated") > (val.get("ttl") * 1000):
                 host["hds.expired"].append(key)
-        self.host_cache.set(server, host)
+                host["hds.expired"].append(key)
         return host
 
     def store_host_state(self, server, key, value, ttl, signature):
@@ -133,7 +128,7 @@ class Store():
                     "value": value,
                     "ttl": ttl,
                     "signature": signature,
-                    "last_updated": int(time.time())
+                    "last_updated": int(time.time() * 1000)  # We want the milliseconds kept
                 }
             }
         }, upsert=True)

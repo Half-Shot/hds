@@ -29,7 +29,7 @@ class DirectoryClient:
     @staticmethod
     def check_error(res):
         if res.get("hds.error", False):
-            raise Exception("Operation failed: %s (%s)" % (res["hds.error.text"], res["hds.error"]))
+            raise HDSFailure(res["hds.error.text"], res["hds.error"])
 
     @staticmethod
     def format_baseurl(url):
@@ -91,20 +91,26 @@ class DirectoryClient:
     async def send_state(self, key, value, ttl=ONE_DAY, baseurl=None):
         if ttl < 10:
             raise ValueError("TTL was < 10")
-        baseurl = DirectoryClient.format_baseurl(baseurl if baseurl is not None else self.base_url)
         payload = self.sign_payload({"hds.ttl": ttl, key: value})
+        await self.send_state_payload(key, payload, self.pub_key, baseurl)
+
+    async def send_state_payload(self, key, payload, pub_key, baseurl=None):
+        baseurl = DirectoryClient.format_baseurl(baseurl if baseurl is not None else self.base_url)
         async with self.__get_session() as session:
-            url = "{}/hosts/{}/state/{}".format(baseurl, self.pub_key, key)
+            url = "{}/hosts/{}/state/{}".format(baseurl, pub_key, key)
             res = await session.put(url=url, json=payload, ssl=SSL_ENABLED)
             if res.status == 201:
                 return
             DirectoryClient.check_error(await res.json())
 
     async def put_topic(self, topic, subtopics=[], baseurl=None):
-        baseurl = DirectoryClient.format_baseurl(baseurl if baseurl is not None else self.base_url)
         payload = self.sign_payload({topic: subtopics})
+        await self.put_topic_payload(topic, payload, self.pub_key, baseurl)
+
+    async def put_topic_payload(self, topic, payload, pub_key, baseurl=None):
+        baseurl = DirectoryClient.format_baseurl(baseurl if baseurl is not None else self.base_url)
         async with self.__get_session() as session:
-            url = "{}/hosts/{}/topic/{}".format(baseurl, self.pub_key, topic)
+            url = "{}/hosts/{}/topic/{}".format(baseurl, pub_key, topic)
             res = await session.put(url=url, json=payload, ssl=SSL_ENABLED)
             if res.status == 201:
                 return
@@ -123,6 +129,19 @@ class DirectoryClient:
             DirectoryClient.check_error(j)
             return j
 
+    async def get_host_topic(self, server: str, topic: str, baseurl=None):
+        baseurl = DirectoryClient.format_baseurl(baseurl if baseurl is not None else self.base_url)
+        if type(topic) is not str or len(topic) < 1:
+            raise ValueError("Topic should be a non-empty string")
+        async with self.__get_session() as session:
+            url = "{}/hosts/{}/topic/{}".format(baseurl, server, topic)
+            res = await session.get(url=url, ssl=False)
+            j = await res.json()
+            print(j)
+            DirectoryClient.check_error(j)
+            return j
+
+
     async def get_topics(self, baseurl=None):
         baseurl = DirectoryClient.format_baseurl(baseurl if baseurl is not None else self.base_url)
         async with self.__get_session() as session:
@@ -132,7 +151,7 @@ class DirectoryClient:
             DirectoryClient.check_error(j)
             return j["topics"]
 
-    async def get_state(self, servername: str, baseurl=None):
+    async def get_state(self, servername: str, baseurl=None, raw=False):
         short_name = servername[:16]
         baseurl = DirectoryClient.format_baseurl(baseurl if baseurl is not None else self.base_url)
         async with self.__get_session() as session:
@@ -140,6 +159,8 @@ class DirectoryClient:
             res: ClientResponse = await session.get(url=url, ssl=SSL_ENABLED)
             DirectoryClient.check_error(await res.json())
             body: dict = await res.json()
+            if raw:
+                return body
             expired = body.pop("hds.expired", [])
             if self.paranoid_mode:
                 for key in expired:

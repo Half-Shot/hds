@@ -3,6 +3,7 @@ from os import path
 import ssl
 import logging
 import base64
+import asyncio
 from .store import RedisStore
 from .hosts import HostHandler
 from .util import HDSFailure
@@ -23,6 +24,8 @@ NAME = os.environ.get("HDS_NAME", os.uname().nodename)
 
 CONTACT_NAME = os.environ.get("HDS_CONTACT_NAME")
 CONTACT_EMAIL = os.environ.get("HDS_CONTACT_EMAIL")
+STATE_HOST = os.environ.get("HDS_HOST", "localhost")
+REGISTER_HOSTS = os.environ.get("HDS_REGISTER_HOSTS", "").split(",")
 
 PORT = int(os.environ.get("HDS_HTTP_PORT", "27012"))
 
@@ -39,7 +42,8 @@ class DirectoryService():
         if PRIVKEY_PATH is not None:
             self.hosthandler = HostHandler(self.store, key_path=PRIVKEY_PATH, password=PASSWORD)
         elif PRIVKEY_DATA is not None:
-            self.hosthandler = HostHandler(self.store, key_data=base64.b64decode(PRIVKEY_DATA), password=PASSWORD)
+            self.hosthandler = HostHandler(self.store, key_data=base64.b64decode(PRIVKEY_DATA),
+                                           password=PASSWORD)
         else:
             raise Exception("Private key not provided, cannot run")
         # self.webinterface = WebInterface(self.store, self.hosthandler)
@@ -73,13 +77,13 @@ class DirectoryService():
 
         self.app.on_response_prepare.append(DirectoryService.__attach_headers)
 
-    def start(self):
+    async def start(self):
         logger.info("Started directory service")
 
         if path.exists(CERTPATH) and path.exists(KEYPATH):
             logger.debug("Cert: %s", CERTPATH)
             logger.debug("Key: %s", KEYPATH)
-            sslcontext = ssl.create_default_context()
+            sslcontext = sslf.create_default_context()
             sslcontext.check_hostname = False
             sslcontext.verify_mode = ssl.CERT_NONE
             sslcontext.load_cert_chain(CERTPATH, KEYPATH)
@@ -92,7 +96,7 @@ class DirectoryService():
             "hds.host",
             self.hosthandler.fedClient.sign_payload({
                 "hds.ttl": 60 * 60 * 24 * 3,
-                "hds.host": "localhost",
+                "hds.host": STATE_HOST,
             })
         )
 
@@ -123,12 +127,25 @@ class DirectoryService():
                     "hds.contact.email": CONTACT_EMAIL,
                 })
             )
-        web.run_app(
-            self.app,
-            host=HOST,
-            port=PORT,
-            ssl_context=sslcontext
-        )
+        # We need to register to a set of central hosts
+        if "" in REGISTER_HOSTS:
+            REGISTER_HOSTS.remove("")
+        if len(REGISTER_HOSTS) > 0:
+            # HACK: To allow the master process to start first.
+            await asyncio.sleep(4)
+        for host in REGISTER_HOSTS:
+            logger.info("Registering with %s", host)
+            await self.hosthandler.federation_register_with(host)
+        logger.info("Registered with all hosts")
+
+        runner = web.AppRunner(self.app)
+        await runner.setup()
+        site = web.TCPSite(runner, HOST, PORT, ssl_context=sslcontext)
+        await site.start()
+        while True:
+            await asyncio.sleep(1000)
+        # wait for finish signal
+        await runner.cleanup()
 
     async def get_version(self, request: web.Request):
         return web.json_response({
@@ -220,7 +237,7 @@ class DirectoryService():
         topic = request.match_info.get("topic")
         try:
             body = await self.get_body(request)
-            self.hosthandler.put_topic(server, topic, body)
+            await self.hosthandler.put_topic(server, topic, body)
         except HDSFailure as e:
             return web.json_response({
                 "hds.error.text": str(e),
@@ -257,4 +274,4 @@ class DirectoryService():
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
-    DirectoryService().start()
+    asyncio.run(DirectoryService().start())

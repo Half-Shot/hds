@@ -1,7 +1,7 @@
 import logging;
 import docker
 import sys
-from spec.integration.simple import SimpleTests
+from spec.integration.tests import SimpleTests
 from spec.integration.hds_runner import HDSRunner
 
 logger = logging.getLogger(__name__)
@@ -33,9 +33,13 @@ if __name__ == "__main__":
     runner = HDSRunner(client)
 
     try:
+        force_logging = "--logging" in sys.argv
         runner.setup()
         tests = SimpleTests(runner)
-        passes, fails = tests.run()
+        whitelist = sys.argv[1:] if len(sys.argv) > 1 else None
+        if force_logging:
+            whitelist.remove("--logging")
+        passes, fails = tests.run(whitelist, force_logging)
     finally:
         runner.tear_down()
 
