@@ -33,24 +33,28 @@ Owner: {}
 Contact: {}
 Country: {}
 Servername (short): {}""".format(
-            state.get("hds.host", "None set"),
-            state.get("hds.name", "None set"),
-            state.get("hds.contact.name", "None set"),
-            state.get("hds.contact.email", "None set"),
-            state.get("hds.countrycode", "None set"),
+            state.pop("hds.host", "None set"),
+            state.pop("hds.name", "None set"),
+            state.pop("hds.contact.name", "None set"),
+            state.pop("hds.contact.email", "None set"),
+            state.pop("hds.countrycode", "None set"),
             server_name[:24]))
+    print("Other state:", state)
 
 
-def pretty_print_topic(topic_res):
+async def pretty_print_topic(c, topic_res):
     if print_error(topic_res):
         return
     print("Hosts that support the topic:")
-
-    for host_name in topic_res["hosts"]:
-        has_subtopics = len(host_values["subtopics"]) > 0
-        print("  ", host_name[:32], "" if has_subtopics else ":No subtopic")
+    for name,items in topic_res["hosts"].items():
+        state = await c.get_state(
+            name
+        )
+        pretty_name = state.get("hds.name", state.get("hds.host", name[:32]))
+        has_subtopics = len(items["subtopics"]) > 0
+        print("  ", pretty_name, "" if has_subtopics else ":No subtopic")
         if has_subtopics:
-            print("    ", "\n    ".join(host_values["subtopics"]))
+            print("    ", "\n    ".join(items["subtopics"]))
 
 
 async def main():
@@ -77,7 +81,7 @@ async def main():
         if args.host_or_topic is None:
             print("topic not given")
             return
-        pretty_print_topic(await c.get_topic(args.host_or_topic))
+        await pretty_print_topic(c, await c.get_topic(args.host_or_topic))
     else:
         print("Request type not understood")
 

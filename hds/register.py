@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 DEFAULT_KEY_LOCATION = Path.joinpath(Path.home(), ".hds/private.pem")
-TTL = 60 * 60 * 24 * 1
+TTL = 60 * 60 * 24 * 1000
 
 
 async def main(args):
@@ -48,6 +48,7 @@ async def main(args):
         else:
             topics[topic_name] = []
     state = {}
+    print(args.state)
     for st in args.state:
         st_split = st.split("=")
         state_name = st_split[0]
@@ -56,27 +57,26 @@ async def main(args):
         else:
             state[state_name] = ""
     state_host = state.pop("hds.host", None)
-    if state_host is not None or len(state.keys()) > 0:
-        state["hds.ttl"] = int(state.pop("hds.ttl"))
     run = True
     while run:
         tasks = []
         logger.info("Sending state and topics...")
         if state_host is not None:
             logger.info("Sending host %s" % (state_host))
-            await client.send_state("hds.host", state_host)
+            await client.send_state("hds.host", state_host, args.ttl)
             logger.debug("Sent host")
         for state_name, state_value in state.items():
             logger.info("Sending state %s = %s" % (state_name, state_value))
-            tasks.append(client.send_state(state_name, state_value))
+            tasks.append(client.send_state(state_name, state_value, args.ttl))
         for topic_name, topic_value in topics.items():
             logger.info("Sending topic %s = %s" % (topic_name, topic_value))
             tasks.append(client.put_topic(topic_name, topic_value))
-        await asyncio.wait(tasks)
+        if len(tasks) > 0:
+            await asyncio.wait(tasks)
         logger.info("Done...")
         run = args.daemon
         if run:
-            sleep(TTL - 60)
+            sleep(args.ttl - 60)
     # 2. Check our keys
 
 
@@ -112,6 +112,7 @@ if __name__ == "__main__":
                         help='Path where the private key is stored')
     parser.add_argument('--host', dest='host', action='store', type=str, default=None,
                         help='Host to set state on')
+    parser.add_argument('-T', '--ttl', dest="ttl", action='store', type=int, default=TTL)
     parser.add_argument('-t', '--topic', dest='topics', action='store', default=[],
                         help='Topics', nargs='+')
     parser.add_argument('-s', '--state', dest='state', action='store', default=[],
